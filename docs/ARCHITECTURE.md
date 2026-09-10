@@ -16,6 +16,8 @@ The game simulation and rendering execute on the player's device. Nginx serves s
 
 The browser creates a random local visitor ID and sends one event at round start plus a result at round end. The analytics API stores the device category/browser, duration and reported score. It derives a masked IP address and a salted SHA-256 hash on the server; it does not keep the raw IP address or full user agent. The dashboard lives at `http://localhost:8090/admin`, is intentionally bound to loopback, and its SQLite file is persisted in the `analytics-data` Docker volume.
 
+For GitHub Pages, analytics is off by default because GitHub Pages cannot host this API. A future deployment can set `window.STAR_CATCHER_ANALYTICS_URL` to the HTTPS address of the dedicated analytics service; the game then uses that service without changing Unity code.
+
 Reported scores are useful for early playtesting but are client supplied. Add server-side score validation before using them for a competitive leaderboard.
 
 ## Files and responsibilities
