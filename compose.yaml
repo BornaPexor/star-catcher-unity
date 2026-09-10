@@ -1,0 +1,36 @@
+name: star-catcher-unity
+services:
+  game:
+    build: .
+    image: star-catcher-unity:local
+    ports:
+      - "${GAME_BIND:-127.0.0.1}:${GAME_PORT:-8088}:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+  analytics:
+    build:
+      context: ./analytics
+    image: star-catcher-analytics:local
+    environment:
+      IP_HASH_SALT: "${IP_HASH_SALT:-change-this-before-public-release}"
+    ports:
+      - "127.0.0.1:${ANALYTICS_PORT:-8090}:8090"
+    volumes:
+      - analytics-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+volumes:
+  analytics-data:

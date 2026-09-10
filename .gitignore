@@ -1,0 +1,11 @@
+/Library/
+/Temp/
+/Logs/
+/obj/
+/UserSettings/
+.env
+.env.*
+!.env.example
+*.csproj
+*.sln
+*.slnx

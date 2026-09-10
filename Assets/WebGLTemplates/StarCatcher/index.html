@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>شکار ستاره‌ها | Unity Web</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#091019;color:#eaf1f6;font:16px Tahoma,Arial,sans-serif}main{max-width:1040px;margin:auto;padding:24px}header,footer,.hud,.controls{display:flex;align-items:center;justify-content:space-between;gap:12px}header{margin-bottom:22px}h1{margin:0;font-size:23px}header small{display:block;color:#93a8b8;font:12px Arial;letter-spacing:3px;margin-top:7px}button{font:inherit;min-height:44px;border:1px solid #364959;border-radius:10px;background:#192a39;color:#eaf1f6;padding:10px 20px;cursor:pointer}button:disabled{opacity:.45;cursor:default}button:focus-visible,canvas:focus-visible{outline:2px solid #d5fa76;outline-offset:3px}.game{border:1px solid #2c3c4b;border-radius:20px;overflow:hidden;background:#121e2a}.hud{padding:16px 24px}.hud small{display:block;color:#9fb2c1;margin-bottom:7px;font-size:13px}.hud strong{font-size:24px}.score{color:#d5fa76}.lives{color:#f39782}.arena{position:relative;aspect-ratio:1000/610;background:#09111b}canvas{width:100%;height:100%;display:block;touch-action:none;outline:0}.overlay{position:absolute;inset:0;display:grid;place-items:center;padding:20px;background:#07101955}.panel{text-align:center;padding:28px;max-width:395px;border:1px solid #354553;border-radius:20px;background:#101e2bf5;box-shadow:0 25px 65px #0004}.icon{font-size:52px;color:#d5fa76}.panel h2{font-size:27px;line-height:1.7;margin:12px 0}.panel p{color:#b2c1cd;line-height:1.9}.panel button{width:100%;background:#d5fa76;color:#1a250b;font-weight:bold;border:0}.controls{padding:13px 20px;border-top:1px solid #2c3c4b}.arrows{display:flex;gap:8px;direction:ltr}.arrows button{touch-action:none;min-width:52px}.help{font-size:13px;color:#9fb2c1}footer{margin-top:18px;font-size:12px;color:#92a6b6}.hidden{display:none}progress{width:100%;accent-color:#d5fa76;margin:15px 0}.timer{text-align:center}.hud>div:last-child{text-align:left}@media(max-width:650px){main{padding:16px 12px}h1{font-size:20px}.arena{aspect-ratio:auto;height:clamp(450px,60dvh,590px)}.controls{flex-wrap:wrap}.help{order:3;flex:0 0 100%;text-align:center}.panel{padding:22px}.panel h2{font-size:24px}.hud{padding:14px 16px}footer{font-size:12px}.desktop{display:none}}
+</style>
+</head>
+<body><main>
+<header><div><h1>✦ شکار ستاره‌ها</h1><small lang="en" dir="ltr">STAR CATCHER / UNITY</small></div><button id="sound" aria-pressed="false">صدا خاموش</button></header>
+<section class="game" aria-label="بازی شکار ستاره‌ها">
+<div class="hud"><div><small>امتیاز</small><strong class="score" id="score">۰</strong></div><div class="timer"><small>زمان باقی‌مانده</small><strong id="time">۶۰</strong></div><div><small>فرصت‌ها</small><strong class="lives" id="lives" aria-label="سه فرصت">♥ ♥ ♥</strong></div></div>
+<div class="arena"><canvas id="unity-canvas" tabindex="0" aria-label="سفینه را با چپ و راست یا لمس حرکت بده"></canvas>
+<div class="overlay" id="overlay"><div class="panel"><div class="icon" aria-hidden="true">✦</div><h2 id="title">ستاره‌ها را بگیر،<br>از شهاب‌ها دور شو.</h2><p id="description">هر ستاره ۱۰ امتیاز؛ سه فرصت و ۶۰ ثانیه برای یک سفر کوتاه.</p><progress id="progress" max="1" value="0" aria-label="بارگذاری بازی"></progress><button id="start" disabled>در حال بارگذاری…</button><p id="error" role="alert" class="hidden"></p></div></div></div>
+<div class="controls"><div class="arrows"><button id="left" aria-label="حرکت به چپ" disabled>←</button><button id="right" aria-label="حرکت به راست" disabled>→</button></div><span class="help">کلیدهای ← → یا لمس و کشیدن روی بازی</span><button id="pause" disabled>توقف</button></div>
+</section><footer><span>Unity Web · نسخهٔ اولیه</span><span class="desktop">Space برای توقف و ادامه</span></footer>
+<noscript>جاوااسکریپت مرورگر را برای اجرای بازی فعال کن.</noscript>
+</main>
+<script>
+const byId=id=>document.getElementById(id), canvas=byId('unity-canvas');
+let unity=null, phase='ready', sound=false;
+const fa=n=>n.toLocaleString('fa-IR');
+const visitorKey='star-catcher-visitor-id';
+const visitorId=localStorage.getItem(visitorKey)||crypto.randomUUID();
+localStorage.setItem(visitorKey,visitorId);
+let analyticsSession='',roundStartedAt=0;
+function deviceSummary(){const ua=navigator.userAgent;const mobile=/Mobi|Android|iPhone|iPad/i.test(ua)?'موبایل':'رایانه';const browser=/Edg\//.test(ua)?'Edge':/Firefox\//.test(ua)?'Firefox':/Chrome\//.test(ua)?'Chrome':/Safari\//.test(ua)?'Safari':'مرورگر ناشناس';return mobile+' · '+browser;}
+function startAnalytics(){analyticsSession=crypto.randomUUID();roundStartedAt=Date.now();fetch('/api/sessions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:analyticsSession,visitorId,device:deviceSummary()})}).catch(()=>{});}
+function finishAnalytics(state){if(!analyticsSession)return;const duration=Math.max(0,Math.round((Date.now()-roundStartedAt)/1000));fetch('/api/sessions/'+encodeURIComponent(analyticsSession),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({score:state.score,durationSeconds:duration})}).catch(()=>{});analyticsSession='';}
+function send(method,value){if(unity){if(value===undefined)unity.SendMessage('Game',method);else unity.SendMessage('Game',method,value);}}
+function update(s){const previousPhase=phase;phase=s.phase;if(phase==='ended'&&previousPhase!=='ended')finishAnalytics(s);byId('score').textContent=fa(s.score);byId('time').textContent=fa(s.time);byId('lives').textContent='♥ '.repeat(s.lives)+'♡ '.repeat(3-s.lives);byId('lives').setAttribute('aria-label',fa(s.lives)+' فرصت');const playing=phase==='playing';byId('overlay').classList.toggle('hidden',playing);byId('pause').disabled=!playing&&phase!=='paused';byId('pause').textContent=phase==='paused'?'ادامه':'توقف';byId('left').disabled=byId('right').disabled=!playing;if(phase==='paused'){byId('title').textContent='ستاره‌ها منتظرند';byId('description').textContent='هر وقت آماده بودی، سفرت را ادامه بده.';byId('start').textContent='ادامهٔ بازی';}else if(phase==='ended'){byId('title').textContent='پایان سفر!';byId('description').textContent='در این سفر '+fa(s.score)+' امتیاز گرفتی.';byId('start').textContent='دوباره بازی کن';}}
+window.addEventListener('unity-state',e=>update(e.detail));
+byId('start').onclick=()=>{if(phase==='paused')send('TogglePause');else{startAnalytics();send('StartRound');}canvas.focus({preventScroll:true});};
+byId('pause').onclick=()=>send('TogglePause');
+byId('sound').onclick=()=>{sound=!sound;send('SetSound',sound?'1':'0');byId('sound').textContent=sound?'صدا روشن':'صدا خاموش';byId('sound').setAttribute('aria-pressed',String(sound));};
+for(const [id,dir] of [['left',-1],['right',1]]){const b=byId(id);b.onpointerdown=e=>{e.preventDefault();b.setPointerCapture(e.pointerId);send('SetDirection',String(dir));};b.onpointerup=b.onpointercancel=b.onlostpointercapture=()=>send('ReleasePointer');b.onkeydown=e=>{if(e.code==='Space'||e.code==='Enter'){e.preventDefault();send('SetDirection',String(dir));}};b.onkeyup=b.onblur=()=>send('ReleasePointer');}
+function pointer(e){const r=canvas.getBoundingClientRect();send('SetTarget',String(Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))));}
+canvas.onpointerdown=e=>{if(phase!=='playing')return;canvas.setPointerCapture(e.pointerId);canvas.focus({preventScroll:true});pointer(e);};
+canvas.onpointermove=e=>{if(canvas.hasPointerCapture(e.pointerId))pointer(e);};
+canvas.onpointerup=canvas.onpointercancel=canvas.onlostpointercapture=()=>send('ReleasePointer');
+document.addEventListener('visibilitychange',()=>{if(document.hidden)send('PauseGame');});
+window.addEventListener('blur',()=>send('PauseGame'));
+function fail(){byId('progress').classList.add('hidden');byId('start').disabled=true;byId('start').textContent='بارگذاری انجام نشد';byId('error').classList.remove('hidden');byId('error').textContent='بازی بارگذاری نشد. اتصال و پشتیبانی WebGL مرورگر را بررسی کن و صفحه را دوباره باز کن.';}
+const loader=document.createElement('script');loader.src='Build/{{{ LOADER_FILENAME }}}';loader.onerror=fail;
+loader.onload=()=>createUnityInstance(canvas,{dataUrl:'Build/{{{ DATA_FILENAME }}}',frameworkUrl:'Build/{{{ FRAMEWORK_FILENAME }}}',codeUrl:'Build/{{{ CODE_FILENAME }}}',streamingAssetsUrl:'StreamingAssets',companyName:'Local Games',productName:'Star Catcher',productVersion:'0.1.0',devicePixelRatio:Math.min(window.devicePixelRatio||1,2)},p=>{byId('progress').value=p;}).then(instance=>{unity=instance;byId('progress').classList.add('hidden');byId('start').disabled=false;byId('start').textContent='شروع بازی';send('SetSound',sound?'1':'0');}).catch(error=>{console.error(error);fail();});
+document.body.appendChild(loader);
+</script></body></html>
