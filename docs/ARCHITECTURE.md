@@ -18,6 +18,8 @@ The browser creates a random local visitor ID and sends one event at round start
 
 For GitHub Pages, analytics is off by default because GitHub Pages cannot host this API. A future deployment can set `window.STAR_CATCHER_ANALYTICS_URL` to the HTTPS address of the dedicated analytics service; the game then uses that service without changing Unity code.
 
+The analytics server uses SQLite for the local Docker setup. When `DATABASE_URL` is supplied, it uses PostgreSQL instead; this makes it compatible with Render's managed Postgres service. Render's free Postgres tier is useful for this prototype but expires after 30 days, so it is not the long-term production datastore.
+
 Reported scores are useful for early playtesting but are client supplied. Add server-side score validation before using them for a competitive leaderboard.
 
 ## Files and responsibilities

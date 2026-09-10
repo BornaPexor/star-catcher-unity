@@ -22,6 +22,7 @@ services:
     image: star-catcher-analytics:local
     environment:
       IP_HASH_SALT: "${IP_HASH_SALT:-change-this-before-public-release}"
+      ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:-https://bornapexor.github.io}"
     ports:
       - "127.0.0.1:${ANALYTICS_PORT:-8090}:8090"
     volumes:

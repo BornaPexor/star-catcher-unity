@@ -8,8 +8,15 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 DATABASE = "/data/star_catcher.sqlite3"
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 SALT = os.environ.get("IP_HASH_SALT", "change-this-before-public-release")
+ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "https://bornapexor.github.io")
 LOCK = threading.Lock()
+POSTGRES = bool(DATABASE_URL)
+
+if POSTGRES:
+    import psycopg
+    from psycopg.rows import dict_row
 
 
 def now():
@@ -17,14 +24,22 @@ def now():
 
 
 def connection():
+    if POSTGRES:
+        return psycopg.connect(DATABASE_URL, row_factory=dict_row)
     db = sqlite3.connect(DATABASE)
     db.row_factory = sqlite3.Row
     return db
 
 
+def execute(db, statement, parameters=()):
+    if POSTGRES:
+        statement = statement.replace("?", "%s")
+    return db.execute(statement, parameters)
+
+
 def initialise():
     with LOCK, connection() as db:
-        db.execute("""CREATE TABLE IF NOT EXISTS sessions (
+        execute(db, """CREATE TABLE IF NOT EXISTS sessions (
             id TEXT PRIMARY KEY, visitor_id TEXT NOT NULL, started_at TEXT NOT NULL,
             ended_at TEXT, duration_seconds INTEGER NOT NULL DEFAULT 0,
             score INTEGER NOT NULL DEFAULT 0, device TEXT NOT NULL,
@@ -56,8 +71,24 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        origin = self.headers.get("Origin")
+        if origin == ALLOWED_ORIGIN:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
         self.end_headers()
         self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        origin = self.headers.get("Origin")
+        if origin != ALLOWED_ORIGIN:
+            return self.send_json(HTTPStatus.FORBIDDEN, {"error": "origin not allowed"})
+        self.send_response(HTTPStatus.NO_CONTENT)
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Access-Control-Allow-Methods", "POST, PATCH, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Max-Age", "86400")
+        self.send_header("Vary", "Origin")
+        self.end_headers()
 
     def read_json(self):
         length = int(self.headers.get("Content-Length", "0"))
@@ -70,9 +101,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(HTTPStatus.OK, {"status": "ok"})
         if self.path == "/sessions":
             with LOCK, connection() as db:
-                rows = db.execute("""SELECT started_at, ended_at, duration_seconds, score,
+                rows = execute(db, """SELECT started_at, ended_at, duration_seconds, score,
                     device, ip_masked FROM sessions ORDER BY started_at DESC LIMIT 200""").fetchall()
-                totals = db.execute("SELECT COUNT(*) AS rounds, COUNT(DISTINCT visitor_id) AS players, COALESCE(MAX(score),0) AS high_score FROM sessions").fetchone()
+                totals = execute(db, "SELECT COUNT(*) AS rounds, COUNT(DISTINCT visitor_id) AS players, COALESCE(MAX(score),0) AS high_score FROM sessions").fetchone()
             return self.send_json(HTTPStatus.OK, {"sessions": [dict(row) for row in rows], "summary": dict(totals)})
         if self.path == "/admin":
             return self.send_html()
@@ -94,7 +125,10 @@ class Handler(BaseHTTPRequestHandler):
         masked = mask_ip(ip)
         digest = hashlib.sha256((SALT + ip).encode("utf-8")).hexdigest()
         with LOCK, connection() as db:
-            db.execute("INSERT OR IGNORE INTO sessions (id, visitor_id, started_at, device, ip_masked, ip_hash) VALUES (?, ?, ?, ?, ?, ?)", (session_id, visitor_id, now(), device, masked, digest))
+            if POSTGRES:
+                execute(db, "INSERT INTO sessions (id, visitor_id, started_at, device, ip_masked, ip_hash) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING", (session_id, visitor_id, now(), device, masked, digest))
+            else:
+                execute(db, "INSERT OR IGNORE INTO sessions (id, visitor_id, started_at, device, ip_masked, ip_hash) VALUES (?, ?, ?, ?, ?, ?)", (session_id, visitor_id, now(), device, masked, digest))
         return self.send_json(HTTPStatus.CREATED, {"sessionId": session_id})
 
     def do_PATCH(self):
@@ -108,7 +142,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid result"})
         session_id = self.path.rsplit("/", 1)[-1][:64]
         with LOCK, connection() as db:
-            result = db.execute("UPDATE sessions SET ended_at = ?, score = ?, duration_seconds = ? WHERE id = ?", (now(), score, duration, session_id))
+            result = execute(db, "UPDATE sessions SET ended_at = ?, score = ?, duration_seconds = ? WHERE id = ?", (now(), score, duration, session_id))
         return self.send_json(HTTPStatus.OK, {"updated": result.rowcount == 1})
 
     def send_html(self):
@@ -118,9 +152,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        origin = self.headers.get("Origin")
+        if origin == ALLOWED_ORIGIN:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
         self.end_headers()
         self.wfile.write(body)
 
 
 initialise()
-ThreadingHTTPServer(("0.0.0.0", 8090), Handler).serve_forever()
+ThreadingHTTPServer(("0.0.0.0", int(os.environ.get("PORT", "8090"))), Handler).serve_forever()
